@@ -22,6 +22,7 @@ cargo run
 | `RUST_LOG`        | no       | `info`                                        |
 | `STATIC_DIR`      | no       | `static`                                      |
 | `GITHUB_TOKEN`    | no       | —                                             |
+| `MIAOU_URL`       | no       | `https://miaou.tomplanche.com`                |
 
 `DATABASE_URL` format: `postgresql://user:password@host:port/dbname`
 
@@ -30,6 +31,50 @@ cargo run
 ### Public
 
 **GET /** — health check
+
+**GET /status**: status report, served on its own subdomain (`status.tomplanche.com`). Plain text by default, JSON when the `Accept` header asks for it (`application/json`, `text/json`).
+
+```
+$ curl https://status.tomplanche.com
+vps-back status: ok
+
+version    2.0.1
+started    2026-09-15T10:12:00+00:00
+uptime     23h 24m 13s
+
+checks
+  database      ok            3 ms
+  miaou         ok            42 ms
+  github-stats  ok            updated 2m 13s ago
+```
+
+```json
+{
+  "data": {
+    "status": "ok",
+    "version": "2.0.1",
+    "started_at": "2026-09-15T10:12:00+00:00",
+    "uptime_seconds": 84253,
+    "checks": {
+      "database": { "status": "ok", "latency_ms": 3 },
+      "miaou": { "status": "ok", "latency_ms": 42 },
+      "github_stats": { "status": "ok", "age_seconds": 133 }
+    }
+  }
+}
+```
+
+Checks:
+
+| Check          | What it does                                                                                | Statuses                          |
+|----------------|---------------------------------------------------------------------------------------------|-----------------------------------|
+| `database`     | pings `PostgreSQL` and measures the round trip                                                | `ok`, `down`                      |
+| `miaou`        | `GET`s `MIAOU_URL` (10 s timeout); `2xx` and `3xx` count as up                                  | `ok`, `down`                      |
+| `github_stats` | reads `last_updated_at` in `github-stats.json`; the file is refreshed every 5 minutes          | `ok`, `stale`, `unavailable`      |
+
+The top level `status` is `ok` only when every check passes, `degraded` otherwise.
+
+The HTTP code reports this API alone: `503` when the database is unreachable, `200` otherwise. So an uptime monitor watching the HTTP code is not woken up by `miaou` being down, while the body still shows exactly what is broken.
 
 **GET /static/\<path\>** — static files (LastFM fetcher output, `github-stats.json`)
 
@@ -110,6 +155,12 @@ sea-orm-cli migrate refresh  # reset and re-run all
 ```
 
 Tables: `sources`, `stickers`, `brew_downloads`.
+
+## Deployment
+
+The status endpoint is exposed on its own subdomain through Caddy. The site block lives in `deploy/Caddyfile.example`: copy it into the VPS Caddyfile and reload Caddy. It rewrites every path to `/status`, so the whole subdomain answers the report.
+
+`miaou.tomplanche.com` is checked through its public URL, so the check covers Caddy and the `10.10.0.2:80` upstream behind it, not just the container. Point `MIAOU_URL` somewhere else (`http://10.10.0.2:80` for instance) to check the upstream directly.
 
 ## Development
 

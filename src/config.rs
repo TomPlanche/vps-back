@@ -10,6 +10,7 @@ pub struct Config {
     pub rust_log: String,
     pub static_dir: String,
     pub github_token: Option<String>,
+    pub miaou_url: String,
 }
 
 impl Config {
@@ -43,6 +44,9 @@ impl Config {
 
         let github_token = env::var("GITHUB_TOKEN").ok();
 
+        let miaou_url =
+            env::var("MIAOU_URL").unwrap_or_else(|_| "https://miaou.tomplanche.com".to_string());
+
         Ok(Self {
             host,
             port,
@@ -51,6 +55,7 @@ impl Config {
             rust_log,
             static_dir,
             github_token,
+            miaou_url,
         })
     }
 }

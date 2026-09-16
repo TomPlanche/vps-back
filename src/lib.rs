@@ -10,6 +10,7 @@ pub mod response;
 pub mod source;
 pub mod static_files;
 pub mod stats;
+pub mod status;
 pub mod sticker;
 
 // Re-export error types for convenience

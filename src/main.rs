@@ -10,11 +10,14 @@ use tower_http::cors::CorsLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use vps_back::{
     brew, config::Config, data_response, db::init_pool, github_stats, middlewares, source,
-    static_files::static_files_service, stats, sticker,
+    static_files::static_files_service, stats, status, sticker,
 };
 
 #[tokio::main]
 async fn main() {
+    // Record the start time as early as possible, for `/status` uptime reporting.
+    status::handlers::init_start_time();
+
     // Load .env file
     dotenvy::dotenv().ok();
 
@@ -91,9 +94,13 @@ async fn main() {
         .nest("/secure", api_router)
         .nest("/brew", brew::router())
         .nest("/stats", stats::router())
+        .nest("/status", status::router())
         .layer(cors)
         .layer(middlewares::tracing::create_tracing_layer())
         .layer(axum::Extension(config.static_dir.clone()))
+        .layer(axum::Extension(status::StatusConfig::new(
+            config.miaou_url.clone(),
+        )))
         .with_state(db);
 
     let addr = format!("{}:{}", config.host, config.port);
