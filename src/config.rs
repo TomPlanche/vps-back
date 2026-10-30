@@ -5,12 +5,10 @@ use std::env;
 pub struct Config {
     pub host: String,
     pub port: u16,
-    pub api_key: String,
     pub allowed_origins: Vec<String>,
     pub rust_log: String,
     pub static_dir: String,
     pub github_token: Option<String>,
-    pub miaou_url: String,
 }
 
 impl Config {
@@ -29,9 +27,6 @@ impl Config {
             .parse::<u16>()
             .map_err(|_| "PORT must be a valid number")?;
 
-        let api_key =
-            env::var("API_KEY").map_err(|_| "API_KEY must be set in environment variables")?;
-
         let allowed_origins = env::var("ALLOWED_ORIGINS")
             .unwrap_or_else(|_| "http://localhost:3000,http://localhost:5173".to_string())
             .split(',')
@@ -44,18 +39,13 @@ impl Config {
 
         let github_token = env::var("GITHUB_TOKEN").ok();
 
-        let miaou_url =
-            env::var("MIAOU_URL").unwrap_or_else(|_| "https://miaou.tomplanche.com".to_string());
-
         Ok(Self {
             host,
             port,
-            api_key,
             allowed_origins,
             rust_log,
             static_dir,
             github_token,
-            miaou_url,
         })
     }
 }

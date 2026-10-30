@@ -29,10 +29,6 @@ pub enum ApiError {
     /// Internal server error - wraps anyhow errors from internal operations
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
-
-    /// Database error - for SeaORM-specific errors
-    #[error("database operation failed")]
-    Database(#[from] sea_orm::DbErr),
 }
 
 impl ApiError {
@@ -42,7 +38,7 @@ impl ApiError {
         match self {
             Self::ValidationFailed(_) => StatusCode::BAD_REQUEST,
             Self::NotFound(_) => StatusCode::NOT_FOUND,
-            Self::Internal(_) | Self::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -66,10 +62,6 @@ impl IntoResponse for ApiError {
             Self::Internal(e) => {
                 tracing::error!("Internal error: {:#}", e);
                 "Internal server error".to_string()
-            }
-            Self::Database(e) => {
-                tracing::error!("Database error: {:#}", e);
-                "Database operation failed".to_string()
             }
             // User-facing errors can show details
             _ => self.to_string(),

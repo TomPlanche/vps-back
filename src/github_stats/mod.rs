@@ -1,5 +1,4 @@
 mod fetcher;
-pub mod handlers;
 mod models;
 
 use std::time::Duration;
@@ -15,7 +14,7 @@ pub async fn run_periodic_update(token: String, static_dir: String) {
         }
     };
 
-    let mut interval = tokio::time::interval(Duration::from_secs(5 * 60));
+    let mut interval = tokio::time::interval(Duration::from_mins(5));
 
     loop {
         interval.tick().await;

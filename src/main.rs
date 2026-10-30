@@ -1,23 +1,17 @@
 use axum::{
     Json, Router,
-    http::{HeaderName, HeaderValue, Method},
-    middleware,
+    http::{HeaderValue, Method},
     routing::get,
 };
 use serde_json::json;
-use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use vps_back::{
-    brew, config::Config, data_response, db::init_pool, github_stats, middlewares, source,
-    static_files::static_files_service, stats, status, sticker,
+    config::Config, data_response, github_stats, middlewares, static_files::static_files_service,
 };
 
 #[tokio::main]
 async fn main() {
-    // Record the start time as early as possible, for `/status` uptime reporting.
-    status::handlers::init_start_time();
-
     // Load .env file
     dotenvy::dotenv().ok();
 
@@ -27,25 +21,13 @@ async fn main() {
         std::process::exit(1);
     });
 
-    // Create application state
-    let app_state = middlewares::auth::AppState {
-        api_key: Arc::new(config.api_key.clone()),
-    };
-
-    // Initialize tracing with sqlx filtering
-    let filter = tracing_subscriber::EnvFilter::new(&config.rust_log)
-        .add_directive("sqlx::query=warn".parse().unwrap());
+    // Initialize tracing
+    let filter = tracing_subscriber::EnvFilter::new(&config.rust_log);
 
     tracing_subscriber::registry()
         .with(filter)
         .with(tracing_subscriber::fmt::layer())
         .init();
-
-    // Initialize database
-    let db = init_pool().await.unwrap_or_else(|e| {
-        eprintln!("Database initialization error: {e:#}");
-        std::process::exit(1);
-    });
 
     // Configure CORS
     let allowed_origins = config
@@ -66,10 +48,7 @@ async fn main() {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers([
-            axum::http::header::CONTENT_TYPE,
-            HeaderName::from_static("x-api-key"),
-        ])
+        .allow_headers([axum::http::header::CONTENT_TYPE])
         .allow_credentials(true);
 
     // Add each allowed origin to the CORS configuration
@@ -78,30 +57,12 @@ async fn main() {
     }
 
     // Build our application with a route
-    // Create API router with protected routes
-    let api_router = Router::new()
-        .nest("/source", source::router())
-        .nest("/stickers", sticker::router())
-        .layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            middlewares::auth::validate_api_key,
-        ))
-        .with_state(db.clone());
-
     let app = Router::new()
         .route("/", get(root))
         .nest_service("/static", static_files_service(&config.static_dir))
-        .nest("/secure", api_router)
-        .nest("/brew", brew::router())
-        .nest("/stats", stats::router())
-        .nest("/status", status::router())
         .layer(cors)
         .layer(middlewares::tracing::create_tracing_layer())
-        .layer(axum::Extension(config.static_dir.clone()))
-        .layer(axum::Extension(status::StatusConfig::new(
-            config.miaou_url.clone(),
-        )))
-        .with_state(db);
+        .layer(axum::Extension(config.static_dir.clone()));
 
     let addr = format!("{}:{}", config.host, config.port);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
