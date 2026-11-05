@@ -75,10 +75,46 @@ async fn main() {
             github_stats::run_periodic_update(token, static_dir).await;
         });
     } else {
-        tracing::warn!("GITHUB_TOKEN not set — GitHub stats will not be generated");
+        tracing::warn!("GITHUB_TOKEN not set: GitHub stats will not be generated");
     }
 
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .unwrap();
+
+    tracing::info!("server stopped");
+}
+
+/// Waits for SIGTERM (sent by `docker stop`) or Ctrl+C.
+///
+/// In a container, the server is PID 1. Linux gives PID 1 no default action
+/// for SIGTERM: without this handler, the signal does nothing, and Docker
+/// kills the server after its stop timeout (10 seconds).
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to listen for Ctrl+C");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to listen for SIGTERM")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => {},
+        () = terminate => {},
+    }
+
+    tracing::info!("shutdown signal received: the server finishes the open requests, then stops");
 }
 
 /// Handles GET requests to the root path ("/").
